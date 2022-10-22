@@ -1,6 +1,14 @@
 pub mod morokoshi {
     #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct ArrayObject {
+        pub value: Option<Box<JsonObject>>,
+        pub next: Option<Box<ArrayObject>>,
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub enum JsonObject {
+        Array(ArrayObject),
+        String(String),
         Number(i64),
         Boolean(bool),
         Null,
@@ -24,29 +32,58 @@ pub mod morokoshi {
             self.curr()
         }
 
-        fn curr(&mut self) -> Option<&char> {
+        fn curr(&self) -> Option<&char> {
             self.input.get(self.pos)
         }
 
-        pub fn parse(&mut self) -> Option<JsonObject> {
-            while self.curr().is_some() && self.curr().unwrap().is_whitespace() {
-                self.next();
+        fn skip_whitespace(&mut self) {
+            while let Some(c) = self.curr() {
+                if c.is_whitespace() {
+                    self.next();
+                } else {
+                    break;
+                }
             }
-            match self.curr() {
+        }
+
+        fn skip_delimiter(&mut self) {
+            while let Some(c) = self.curr() {
+                if c.is_whitespace() || c == &',' || c == &':' {
+                    self.next();
+                } else {
+                    break;
+                }
+            }
+        }
+        pub fn parse(&mut self) -> Option<JsonObject> {
+            let result = self.parse_inside();
+            if self.curr().is_some() {
+                // まだ読み終わっていない場合
+                None
+            } else {
+                result
+            }
+        }
+
+        fn parse_inside(&mut self) -> Option<JsonObject> {
+            self.skip_whitespace();
+            let a = match self.curr() {
                 // Some(&'{') => self.parse_object(),
-                // Some(&'[') => self.parse_array(),
-                // Some(&'"') => self.parse_string(),
+                Some(&'[') => self.parse_array(),
+                Some(&'"') => self.parse_string(),
                 Some(&'t') => self.parse_true(),
                 Some(&'f') => self.parse_false(),
                 Some(&'n') => self.parse_null(),
                 Some(&'-') => self.parse_number(),
                 Some(&('0'..='9')) => self.parse_number(),
                 _ => None,
-            }
+            };
+            self.skip_whitespace();
+            a
         }
 
         fn parse_null(&mut self) -> Option<JsonObject> {
-            if self.curr().unwrap() == &'n'
+            let result = if self.curr().unwrap() == &'n'
                 && self.next().unwrap() == &'u'
                 && self.next().unwrap() == &'l'
                 && self.next().unwrap() == &'l'
@@ -54,11 +91,13 @@ pub mod morokoshi {
                 Some(JsonObject::Null)
             } else {
                 None
-            }
+            };
+            self.next();
+            result
         }
 
         fn parse_false(&mut self) -> Option<JsonObject> {
-            if self.curr().unwrap() == &'f'
+            let result = if self.curr().unwrap() == &'f'
                 && self.next().unwrap() == &'a'
                 && self.next().unwrap() == &'l'
                 && self.next().unwrap() == &'s'
@@ -67,11 +106,13 @@ pub mod morokoshi {
                 Some(JsonObject::Boolean(false))
             } else {
                 None
-            }
+            };
+            self.next();
+            result
         }
 
         fn parse_true(&mut self) -> Option<JsonObject> {
-            if self.curr().unwrap() == &'t'
+            let result = if self.curr().unwrap() == &'t'
                 && self.next().unwrap() == &'r'
                 && self.next().unwrap() == &'u'
                 && self.next().unwrap() == &'e'
@@ -79,17 +120,75 @@ pub mod morokoshi {
                 Some(JsonObject::Boolean(true))
             } else {
                 None
-            }
+            };
+            self.next();
+            result
         }
 
         fn parse_number(&mut self) -> Option<JsonObject> {
             let mut num = String::new();
             num.push(*self.curr().unwrap());
 
-            while self.next().is_some() && !self.curr().unwrap().is_whitespace() {
-                num.push(*self.curr().unwrap());
+            while self.next().is_some() {
+                let d = self.curr().unwrap();
+                if &'0' < d && d < &'9' {
+                    num.push(*d);
+                } else {
+                    break;
+                }
             }
             num.parse().ok().map(JsonObject::Number)
+        }
+
+        fn parse_string(&mut self) -> Option<JsonObject> {
+            let mut string = String::new();
+            self.next();
+            while self.curr().unwrap() != &'"' {
+                string.push(*self.curr().unwrap());
+                if self.next().is_none() {
+                    return None;
+                }
+            }
+            self.next();
+            Some(JsonObject::String(string))
+        }
+
+        fn parse_array(&mut self) -> Option<JsonObject> {
+            self.next(); // '['を読み飛ばす
+            match self.parse_array_inside() {
+                Some(array) => Some(JsonObject::Array(array)),
+                None => None,
+            }
+        }
+
+        fn parse_array_inside(&mut self) -> Option<ArrayObject> {
+            let value = self.parse_inside();
+            self.skip_delimiter();
+            if self.curr().unwrap() == &']' {
+                self.next();
+                match value {
+                    //[1] 1つの要素を持つ配列
+                    Some(x) => Some(ArrayObject {
+                        value: Some(Box::new(x)),
+                        next: None,
+                    }),
+                    //[] 空の配列
+                    None => Some(ArrayObject {
+                        value: None,
+                        next: None,
+                    }),
+                }
+            } else {
+                match self.parse_array_inside() {
+                    // 2個以上の要素を持つ配列 1つめの要素はvalueに、2つめ以降はnextに入れる
+                    Some(next_value) => Some(ArrayObject {
+                        value: Some(Box::new(value.unwrap())),
+                        next: Some(Box::new(next_value)),
+                    }),
+                    //多分配列ではない
+                    None => None,
+                }
+            }
         }
     }
 }
@@ -156,5 +255,49 @@ mod tests {
         let mut parser = MorokoshiJsonParser::new(a);
         let result = parser.parse();
         assert_eq!(result, None);
+    }
+
+    #[test]
+    fn string() {
+        let a = String::from("\"hello\"");
+        let mut parser = MorokoshiJsonParser::new(a);
+        let result = parser.parse();
+        assert_eq!(result, Some(JsonObject::String(String::from("hello"))));
+    }
+
+    #[test]
+    fn not_string() {
+        let a = String::from("\"hello");
+        let mut parser = MorokoshiJsonParser::new(a);
+        let result = parser.parse();
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn empty_array() {
+        let a = String::from("[]");
+        let mut parser = MorokoshiJsonParser::new(a);
+        let result = parser.parse();
+        assert_eq!(
+            result,
+            Some(JsonObject::Array(ArrayObject {
+                value: None,
+                next: None,
+            }))
+        );
+    }
+
+    #[test]
+    fn one_element_array() {
+        let a = String::from("[123]");
+        let mut parser = MorokoshiJsonParser::new(a);
+        let result = parser.parse();
+        assert_eq!(
+            result,
+            Some(JsonObject::Array(ArrayObject {
+                value:  Some(Box::new(JsonObject::Number(123))),
+                next: None,
+            }))
+        );
     }
 }
