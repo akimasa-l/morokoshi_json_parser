@@ -1,6 +1,7 @@
 pub mod morokoshi {
-    #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub enum JsonObject {
+        Number(i64),
         Boolean(bool),
         Null,
     }
@@ -11,7 +12,7 @@ pub mod morokoshi {
     }
 
     impl MorokoshiJsonParser {
-       pub fn new(input: String) -> MorokoshiJsonParser {
+        pub fn new(input: String) -> MorokoshiJsonParser {
             MorokoshiJsonParser {
                 input: input.chars().collect(),
                 pos: 0,
@@ -27,7 +28,7 @@ pub mod morokoshi {
             self.input.get(self.pos)
         }
 
-       pub fn parse(&mut self) -> Option<JsonObject> {
+        pub fn parse(&mut self) -> Option<JsonObject> {
             while self.curr().is_some() && self.curr().unwrap().is_whitespace() {
                 self.next();
             }
@@ -38,8 +39,8 @@ pub mod morokoshi {
                 Some(&'t') => self.parse_true(),
                 Some(&'f') => self.parse_false(),
                 Some(&'n') => self.parse_null(),
-                // Some(&'-') => self.parse_number(),
-                // Some(&'0'...'9') => self.parse_number(),
+                Some(&'-') => self.parse_number(),
+                Some(&('0'..='9')) => self.parse_number(),
                 _ => None,
             }
         }
@@ -80,6 +81,16 @@ pub mod morokoshi {
                 None
             }
         }
+
+        fn parse_number(&mut self) -> Option<JsonObject> {
+            let mut num = String::new();
+            num.push(*self.curr().unwrap());
+
+            while self.next().is_some() && !self.curr().unwrap().is_whitespace() {
+                num.push(*self.curr().unwrap());
+            }
+            num.parse().ok().map(JsonObject::Number)
+        }
     }
 }
 
@@ -97,5 +108,53 @@ mod tests {
         let mut parser = MorokoshiJsonParser::new(a);
         let result = parser.parse();
         assert_eq!(result, Some(JsonObject::Null));
+    }
+
+    #[test]
+    fn not_null() {
+        let a = String::from("nu1l");
+        let mut parser = MorokoshiJsonParser::new(a);
+        let result = parser.parse();
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn true_test() {
+        let a = String::from("true");
+        let mut parser = MorokoshiJsonParser::new(a);
+        let result = parser.parse();
+        assert_eq!(result, Some(JsonObject::Boolean(true)));
+    }
+
+    #[test]
+    fn false_test() {
+        let a = String::from("false");
+        let mut parser = MorokoshiJsonParser::new(a);
+        let result = parser.parse();
+        assert_eq!(result, Some(JsonObject::Boolean(false)));
+    }
+
+    #[test]
+    fn number_positive_test() {
+        let a = String::from("123");
+        let mut parser = MorokoshiJsonParser::new(a);
+        let result = parser.parse();
+        assert_eq!(result, Some(JsonObject::Number(123)));
+    }
+
+    #[test]
+    fn number_negative_test() {
+        let a = String::from("-123");
+        let mut parser = MorokoshiJsonParser::new(a);
+        let result = parser.parse();
+        assert_eq!(result, Some(JsonObject::Number(-123)));
+    }
+
+    #[test]
+    fn not_number() {
+        let a = String::from("-1f23");
+        let mut parser = MorokoshiJsonParser::new(a);
+        let result = parser.parse();
+        assert_eq!(result, None);
     }
 }
