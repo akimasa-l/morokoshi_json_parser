@@ -300,4 +300,85 @@ mod tests {
             }))
         );
     }
+
+    #[test]
+    fn one_element_array2() {
+        let a = String::from("[null]");
+        let mut parser = MorokoshiJsonParser::new(a);
+        let result = parser.parse();
+        assert_eq!(
+            result,
+            Some(JsonObject::Array(ArrayObject {
+                value:  Some(Box::new(JsonObject::Null)),
+                next: None,
+            }))
+        );
+    }
+
+    #[test]
+    fn one_element_array3() {
+        let a = String::from("[\"Hello\"]");
+        let mut parser = MorokoshiJsonParser::new(a);
+        let result = parser.parse();
+        assert_eq!(
+            result,
+            Some(JsonObject::Array(ArrayObject {
+                value:  Some(Box::new(JsonObject::String(String::from("Hello")))),
+                next: None,
+            }))
+        );
+    }
+
+    #[test]
+    fn two_element_array() {
+        let a = String::from("[123,456]");
+        let mut parser = MorokoshiJsonParser::new(a);
+        let result = parser.parse();
+        assert_eq!(
+            result,
+            Some(JsonObject::Array(ArrayObject {
+                value:  Some(Box::new(JsonObject::Number(123))),
+                next: Some(Box::new(ArrayObject {
+                    value: Some(Box::new(JsonObject::Number(456))),
+                    next: None,
+                })),
+            }))
+        );
+    }
+    #[test]
+    fn two_element_array2() {
+        let a = String::from("[\"Hello\",\"World\"]");
+        let mut parser = MorokoshiJsonParser::new(a);
+        let result = parser.parse();
+        assert_eq!(
+            result,
+            Some(JsonObject::Array(ArrayObject {
+                value:  Some(Box::new(JsonObject::String(String::from("Hello")))),
+                next: Some(Box::new(ArrayObject {
+                    value: Some(Box::new(JsonObject::String(String::from("World")))),
+                    next: None,
+                })),
+            }))
+        );
+    }
+
+    #[test]
+    fn three_element_array() {
+        let a = String::from("[123,true,\"Hello\"]");
+        let mut parser = MorokoshiJsonParser::new(a);
+        let result = parser.parse();
+        assert_eq!(
+            result,
+            Some(JsonObject::Array(ArrayObject {
+                value:  Some(Box::new(JsonObject::Number(123))),
+                next: Some(Box::new(ArrayObject {
+                    value: Some(Box::new(JsonObject::Boolean(true))),
+                    next: Some(Box::new(ArrayObject {
+                        value: Some(Box::new(JsonObject::String(String::from("Hello")))),
+                        next: None,
+                    })),
+                })),
+            }))
+        );
+    }
 }
